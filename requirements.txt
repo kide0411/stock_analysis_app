@@ -1,7 +1,16 @@
+# Streamlit 主程式
 streamlit==1.25.0
+
+# 資料處理
 pandas==2.2.0
-numpy==1.26.4
-yfinance==0.2.29
-matplotlib==3.7.2
-plotly==5.18.0
+numpy==1.26.0
+
+# 圖表與繪圖
+matplotlib==3.8.1
+
+# 圖片處理
 Pillow==9.5.0
+
+# 其他常用套件，可視情況添加
+requests==2.32.0
+scipy==1.11.1
