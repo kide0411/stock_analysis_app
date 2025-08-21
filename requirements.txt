@@ -1,5 +1,6 @@
 streamlit==1.25.0
-yfinance==0.2.29
-pandas>=2.2.0,<2.4.0
-numpy>=1.25.0,<1.26.0
-plotly>=5.0.0
+pandas==2.1.0
+yfinance==0.2.27
+numpy==1.26.2
+matplotlib==3.8.0
+plotly==5.16.1
