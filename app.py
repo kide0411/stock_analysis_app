@@ -1,198 +1,147 @@
+# app.py
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="AI股票智能分析師", layout="wide")
+st.set_page_config(page_title="AI股票分析師", layout="wide")
+
+# ---------------------------------
+# 標題與說明
+# ---------------------------------
 st.title("AI智能股票分析師")
+st.markdown("""
+這是一個使用 **Streamlit** 與 **Python** 打造的 AI 股票分析工具，
+能自動抓取個股歷史資料、法人籌碼、技術指標及大盤資訊，
+提供智能操作建議、方向判斷與勝率估算。
+""")
 
-# ---------------------------
-# 股票輸入
-# ---------------------------
-stock_code = st.text_input("股票代號 (例如: 2330.TW)", value="2330.TW")
+# ---------------------------------
+# 輸入股票代碼
+# ---------------------------------
+ticker_input = st.text_input("請輸入股票代碼（例如 2330.TW）", value="2330.TW")
 
-# ---------------------------
-# 抓取股票資料
-# ---------------------------
+# 下載歷史股價
 @st.cache_data
-def fetch_stock_data(ticker):
-    data = yf.download(ticker, period="180d", interval="1d")
+def get_stock_data(ticker):
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)  # 近一年資料
+    data = yf.download(ticker, start=start_date, end=end_date)
+    data.reset_index(inplace=True)
     data['MA5'] = data['Close'].rolling(5).mean()
     data['MA20'] = data['Close'].rolling(20).mean()
-    data['STD20'] = data['Close'].rolling(20).std()
-    data['UpperBB'] = data['MA20'] + 2 * data['STD20']
-    data['LowerBB'] = data['MA20'] - 2 * data['STD20']
+    # 布林帶
+    data['BB_upper'] = data['MA20'] + 2 * data['Close'].rolling(20).std()
+    data['BB_lower'] = data['MA20'] - 2 * data['Close'].rolling(20).std()
+    # RSI
     delta = data['Close'].diff()
-    up = delta.clip(lower=0)
-    down = -1*delta.clip(upper=0)
+    up, down = delta.copy(), delta.copy()
+    up[up < 0] = 0
+    down[down > 0] = 0
     roll_up = up.rolling(14).mean()
-    roll_down = down.rolling(14).mean()
-    data['RSI'] = 100 - 100 / (1 + roll_up / roll_down)
+    roll_down = down.abs().rolling(14).mean()
+    RS = roll_up / roll_down
+    data['RSI'] = 100 - (100 / (1 + RS))
     # MACD
-    data['EMA12'] = data['Close'].ewm(span=12, adjust=False).mean()
-    data['EMA26'] = data['Close'].ewm(span=26, adjust=False).mean()
-    data['MACD'] = data['EMA12'] - data['EMA26']
+    EMA12 = data['Close'].ewm(span=12, adjust=False).mean()
+    EMA26 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = EMA12 - EMA26
     data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
     return data
 
-try:
-    stock_data = fetch_stock_data(stock_code)
-    current_price = stock_data['Close'].iloc[-1]
-    st.write(f"最新收盤價: {current_price:.2f}")
-except:
-    st.error("無法抓取股票資料，請確認代碼或網路。")
-    st.stop()
+if ticker_input:
+    try:
+        df = get_stock_data(ticker_input)
+        st.subheader(f"{ticker_input} 股價資料 (近一年)")
+        st.dataframe(df.tail(10))
 
-# ---------------------------
-# 法人籌碼分析
-# ---------------------------
-st.subheader("法人籌碼分析")
-url = f"https://www.twse.com.tw/exchangeReport/MI_MARGN?response=html&date=20250821&selectType=ALLBUT0999"
-try:
-    response = requests.get(url)
-    data_chip = pd.read_html(response.text)[0]
-    data_chip.columns = data_chip.iloc[0]
-    data_chip = data_chip.drop(0)
-    data_chip = data_chip.set_index('證券代號')
-    stock_chips = data_chip.loc[stock_code]
-    foreign_net = int(stock_chips['外資買超股數'])
-    invest_trust_net = int(stock_chips['投信買超股數'])
-    dealer_net = int(stock_chips['自營商買超股數'])
-    st.write(f"外資買超股數: {foreign_net}")
-    st.write(f"投信買超股數: {invest_trust_net}")
-    st.write(f"自營商買超股數: {dealer_net}")
-except:
-    st.warning("無法抓取法人籌碼資料，可手動輸入")
-    foreign_net = st.number_input("外資買賣超(張)", value=0)
-    invest_trust_net = st.number_input("投信買賣超(張)", value=0)
-    dealer_net = st.number_input("自營商買賣超(張)", value=0)
+        # ---------------------------------
+        # 繪製 K 線圖 + 技術指標
+        # ---------------------------------
+        st.subheader("K線圖與技術指標")
+        fig = go.Figure()
+        fig.add_trace(go.Candlestick(x=df['Date'],
+                                     open=df['Open'],
+                                     high=df['High'],
+                                     low=df['Low'],
+                                     close=df['Close'],
+                                     name='K線'))
+        fig.add_trace(go.Scatter(x=df['Date'], y=df['MA5'], line=dict(color='blue', width=1), name='MA5'))
+        fig.add_trace(go.Scatter(x=df['Date'], y=df['MA20'], line=dict(color='orange', width=1), name='MA20'))
+        fig.add_trace(go.Scatter(x=df['Date'], y=df['BB_upper'], line=dict(color='green', width=1, dash='dot'), name='BB上軌'))
+        fig.add_trace(go.Scatter(x=df['Date'], y=df['BB_lower'], line=dict(color='red', width=1, dash='dot'), name='BB下軌'))
+        fig.update_layout(xaxis_rangeslider_visible=False, height=600)
+        st.plotly_chart(fig, use_container_width=True)
 
-# ---------------------------
-# 技術面分析
-# ---------------------------
-st.subheader("技術面分析")
-latest = stock_data.iloc[-1]
-ma5, ma20, rsi = latest['MA5'], latest['MA20'], latest['RSI']
+        # 成交量
+        st.subheader("成交量")
+        vol_fig = go.Figure()
+        vol_fig.add_trace(go.Bar(x=df['Date'], y=df['Volume'], name='成交量'))
+        st.plotly_chart(vol_fig, use_container_width=True)
 
-tech_score = 0
-tech_msgs = []
+        # MACD
+        st.subheader("MACD")
+        macd_fig = go.Figure()
+        macd_fig.add_trace(go.Scatter(x=df['Date'], y=df['MACD'], name='MACD'))
+        macd_fig.add_trace(go.Scatter(x=df['Date'], y=df['Signal'], name='Signal'))
+        st.plotly_chart(macd_fig, use_container_width=True)
 
-# 均線判斷
-if current_price > ma5 and current_price > ma20:
-    tech_score += 2
-    tech_msgs.append("股價高於MA5及MA20，短中期偏多。")
-else:
-    tech_score -= 2
-    tech_msgs.append("股價低於均線，偏空。")
+        # RSI
+        st.subheader("RSI 指標")
+        st.line_chart(df[['RSI']].set_index(df['Date']))
 
-# RSI判斷
-if rsi < 30:
-    tech_score += 1
-    tech_msgs.append("RSI低於30，短線超賣偏多。")
-elif rsi > 70:
-    tech_score -=1
-    tech_msgs.append("RSI高於70，短線超買偏空。")
+        # ---------------------------------
+        # 法人籌碼輸入與分析
+        # ---------------------------------
+        st.subheader("法人籌碼分析")
+        st.markdown("請輸入最近一天的買賣超股數（單位：張）")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            foreign = st.number_input("外資買賣超", value=0)
+        with col2:
+            investment = st.number_input("投信買賣超", value=0)
+        with col3:
+            dealer = st.number_input("自營商買賣超", value=0)
 
-# ---------------------------
-# 籌碼面分析
-# ---------------------------
-chip_score = 0
-chip_msgs = []
+        total_chip = foreign + investment + dealer
+        if total_chip > 0:
+            bias = "偏多"
+        elif total_chip < 0:
+            bias = "偏空"
+        else:
+            bias = "中性"
+        st.write(f"法人總買賣超: {total_chip} 張 → 市場偏向：{bias}")
 
-net_total = foreign_net + invest_trust_net + dealer_net
-if net_total > 0:
-    chip_score +=1
-    chip_msgs.append("法人總買超，偏多。")
-elif net_total < 0:
-    chip_score -=1
-    chip_msgs.append("法人總賣超，偏空。")
-else:
-    chip_msgs.append("法人買賣超平衡，無偏向。")
+        # ---------------------------------
+        # 勝率估算與操作建議
+        # ---------------------------------
+        st.subheader("勝率估算與操作建議")
+        last_close = df['Close'].iloc[-1]
+        last_rsi = df['RSI'].iloc[-1]
 
-# ---------------------------
-# 大盤與期貨分析
-# ---------------------------
-st.subheader("大盤與期貨分析")
-try:
-    twii = yf.Ticker("^TWII")
-    twii_hist = twii.history(period="60d")
-    taiwan_index = twii_hist['Close'].iloc[-1]
-    st.write(f"加權指數收盤價: {taiwan_index}")
-except:
-    st.warning("無法抓取大盤資料，可手動輸入")
-    taiwan_index = st.number_input("加權指數收盤價", value=0)
+        # 簡單勝率估算：RSI + MA 趨勢
+        win_rate = 50
+        if last_rsi < 30:
+            win_rate += 20
+        elif last_rsi > 70:
+            win_rate -= 20
+        if df['MA5'].iloc[-1] > df['MA20'].iloc[-1]:
+            win_rate += 10
+        else:
+            win_rate -= 10
+        win_rate = max(0, min(win_rate, 100))
+        st.write(f"預估勝率: {win_rate}%")
 
-# ---------------------------
-# 綜合判斷
-# ---------------------------
-total_score = tech_score + chip_score
+        # 操作建議
+        if win_rate >= 60 and bias=="偏多":
+            suggestion = "建議：可考慮買進或持有"
+        elif win_rate <= 40 and bias=="偏空":
+            suggestion = "建議：可考慮賣出或觀望"
+        else:
+            suggestion = "建議：觀望為主"
+        st.write(suggestion)
 
-if total_score > 2:
-    direction = "多方偏強"
-    win_rate = 70
-elif total_score > 0:
-    direction = "偏多"
-    win_rate = 60
-elif total_score == 0:
-    direction = "中立"
-    win_rate = 50
-elif total_score > -2:
-    direction = "偏空"
-    win_rate = 40
-else:
-    direction = "空方偏強"
-    win_rate = 30
-
-# ---------------------------
-# 結果顯示
-# ---------------------------
-st.subheader("分析結果")
-st.markdown(f"**判斷方向:** {direction}")
-st.markdown(f"**勝率估算:** {win_rate}%")
-
-st.markdown("**詳細分析文字解讀:**")
-for msg in tech_msgs + chip_msgs:
-    st.write(f"- {msg}")
-
-st.markdown("**操作建議:**")
-if direction in ["多方偏強", "偏多"]:
-    st.write("- 可考慮逢低買進或持有，注意支撐位與停損點。")
-elif direction in ["偏空", "空方偏強"]:
-    st.write("- 可考慮觀望或減碼，若持股建議設停損。")
-else:
-    st.write("- 建議觀望，等待明確趨勢訊號。")
-
-# ---------------------------
-# 互動技術圖表
-# ---------------------------
-st.subheader("互動技術圖表")
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                    vertical_spacing=0.02, 
-                    row_heights=[0.7,0.3], 
-                    specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
-
-# K線 + 均線 + 布林帶
-fig.add_trace(go.Candlestick(x=stock_data.index,
-                             open=stock_data['Open'],
-                             high=stock_data['High'],
-                             low=stock_data['Low'],
-                             close=stock_data['Close'],
-                             name="K線"))
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['MA5'], line=dict(color='blue', width=1), name='MA5'))
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['MA20'], line=dict(color='orange', width=1), name='MA20'))
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['UpperBB'], line=dict(color='lightgray', width=1), name='UpperBB'))
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['LowerBB'], line=dict(color='lightgray', width=1), name='LowerBB'))
-
-# 成交量
-fig.add_trace(go.Bar(x=stock_data.index, y=stock_data['Volume'], name='成交量', marker_color='gray'), row=2, col=1)
-
-# MACD 與 Signal
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['MACD'], line=dict(color='green', width=1), name='MACD'), row=1, col=1, secondary_y=True)
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Signal'], line=dict(color='red', width=1), name='Signal'), row=1, col=1, secondary_y=True)
-
-# 更新 layout
-fig.update_layout(xaxis_rangeslider_visible=False, height=700, width=1000)
-st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.error(f"發生錯誤: {e}")
