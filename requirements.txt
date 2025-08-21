@@ -1,6 +1,7 @@
 streamlit==1.25.0
-pandas==2.1.0
-yfinance==0.2.27
-numpy==1.26.2
-matplotlib==3.8.0
-plotly==5.16.1
+pandas==2.2.0
+numpy==1.26.4
+yfinance==0.2.29
+matplotlib==3.7.2
+plotly==5.18.0
+Pillow==9.5.0
