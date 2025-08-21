@@ -1,10 +1,3 @@
-
----
-
-### 3️⃣ **app.py**  
-保持完整功能，免費版 Streamlit 可執行：
-
-```python
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -17,10 +10,16 @@ st.title("AI 智能股票分析師")
 
 # --- 股票輸入 ---
 ticker = st.text_input("輸入台股代號 (加 .TW):", value="2330.TW")
+st.caption("請確保股票代號加上 .TW，例如 2330.TW")
 
 # --- 抓取歷史資料 ---
 if ticker:
-    data = yf.download(ticker, period="180d", interval="1d")
+    try:
+        data = yf.download(ticker, period="180d", interval="1d")
+    except Exception as e:
+        st.error(f"抓取股票資料失敗: {e}")
+        data = pd.DataFrame()
+
     if not data.empty:
         st.subheader("歷史股價")
         st.dataframe(data.tail(5))
@@ -68,9 +67,9 @@ if ticker:
         
         # --- 籌碼面手動輸入 ---
         st.subheader("法人籌碼分析")
-        foreign = st.number_input("外資買賣超", value=0)
-        investment = st.number_input("投信買賣超", value=0)
-        dealer = st.number_input("自營商買賣超", value=0)
+        foreign = st.number_input("外資買賣超", value=0, step=1)
+        investment = st.number_input("投信買賣超", value=0, step=1)
+        dealer = st.number_input("自營商買賣超", value=0, step=1)
         total_chip = foreign + investment + dealer
         
         # --- 技術面與籌碼面分析 ---
