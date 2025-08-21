@@ -38,6 +38,22 @@
    - MACD + Signal
    - 可互動放大縮小檢視
 
+---
+
+## 系統需求
+
+- Python 3.11 或以上
+- Streamlit
+- yfinance
+- pandas
+- numpy
+- requests
+- plotly
+- Pillow
+- rich
+
+---
+
 ## 安裝與使用
 
 1. **Clone 或下載專案**

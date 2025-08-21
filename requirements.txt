@@ -1,6 +1,17 @@
-streamlit==1.25.0
-yfinance==0.2.29
-pandas==2.2.0
-numpy==1.26.5
-requests==2.31.0
-plotly==5.15.0
+# Streamlit 與相關套件
+streamlit>=1.25,<2.0
+plotly>=5.15
+
+# 股票資料抓取
+yfinance>=0.2.29
+pandas>=2.2
+numpy>=1.25
+
+# HTTP 請求
+requests>=2.31
+
+# Pillow：圖像處理，Streamlit 依賴
+Pillow>=9.6
+
+# 可選：提升文字顯示美化
+rich>=14.0
